@@ -195,9 +195,360 @@
       "dependsOn": [
         "2c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f"
       ]
+    },
+    {
+      "parameters": {
+        "channel": "#urgent",
+        "text": "={{ \"🚨 URGENT EMAIL ALERT\\n\\n*From:* \" + $node[\"Parse Classification\"].json.senderName + \" (\" + $node[\"Parse Classification\"].json.sender + \")\\n*Subject:* \" + $node[\"Parse Classification\"].json.subject + \"\\n*Priority:* \" + $node[\"Parse Extracted Data\"].json.priorityLevel + \"\\n*Action Items:* \" + ($node[\"Parse Extracted Data\"].json.actionItems.join(', ') || 'None identified') + \"\\n*Deadlines:* \" + ($node[\"Parse Extracted Data\"].json.deadlines.join(', ') || 'None specified') + \"\\n\\n_Message ID: \" + $node[\"Parse Classification\"].json.messageId + \"_\" }}",
+        "other_properties": {
+          "icon_emoji": ":rotating_light:"
+        }
+      },
+      "id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+      "name": "Slack - Urgent Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 3,
+      "position": [
+        2100,
+        100
+      ],
+      "credentials": {
+        "slackApi": "slack_creds"
+      },
+      "dependsOn": [
+        "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b"
+      ]
+    },
+    {
+      "parameters": {
+        "phoneNumber": "={{ $env.ADMIN_PHONE_NUMBER }}",
+        "message": "={{ \"URGENT EMAIL ALERT: \" + $node[\"Parse Classification\"].json.subject + \" from \" + $node[\"Parse Classification\"].json.senderName }}",
+        "otherOptions": {
+          "from": "=SMS_TWILIO_FROM"
+        }
+      },
+      "id": "3d4e5f6a-7b8c-9d0e-1f2a-3b4c5d6e7f8a",
+      "name": "SMS Alert (Twilio)",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        250
+      ],
+      "credentials": {
+        "twilioApi": "twilio_creds"
+      },
+      "dependsOn": [
+        "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b"
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "#client-requests",
+        "text": "={{ \"📋 CLIENT REQUEST\\n\\n*From:* \" + $node[\"Parse Classification\"].json.senderName + \" (\" + $node[\"Parse Classification\"].json.sender + \")\\n*Subject:* \" + $node[\"Parse Classification\"].json.subject + \"\\n*Priority:* \" + $node[\"Parse Extracted Data\"].json.priorityLevel + \"\\n*Action Items:* \" + ($node[\"Parse Extracted Data\"].json.actionItems.join(', ') || 'None identified') + \"\\n\\n_Message ID: \" + $node[\"Parse Classification\"].json.messageId + \"_\" }}",
+        "other_properties": {
+          "icon_emoji": ":clipboard:"
+        }
+      },
+      "id": "5f6a7b8c-9d0e-1f2a-3b4c-5d6e7f8a9b0c",
+      "name": "Slack - Client Requests",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 3,
+      "position": [
+        2100,
+        400
+      ],
+      "credentials": {
+        "slackApi": "slack_creds"
+      },
+      "dependsOn": [
+        "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b"
+      ]
+    },
+    {
+      "parameters": {
+        "docId": "={{ $env.PROJECT_MGMT_DOC_ID }}",
+        "resource": "task",
+        "operation": "create",
+        "title": "={{ '[CLIENT] ' + $node[\"Parse Classification\"].json.subject }}",
+        "description": "={{ 'Email from: ' + $node[\"Parse Classification\"].json.sender + '\\n\\nAction Items:\\n' + $node[\"Parse Extracted Data\"].json.actionItems.map(item => '- ' + item).join('\\n') }}",
+        "status": "={{ $node[\"Parse Extracted Data\"].json.priorityLevel === 'HIGH' ? 'pending' : 'backlog' }}"
+      },
+      "id": "7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e",
+      "name": "Create Project Task",
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 4,
+      "position": [
+        2100,
+        550
+      ],
+      "credentials": {
+        "asanaApi": "asana_creds"
+      },
+      "dependsOn": [
+        "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b"
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "#team",
+        "text": "={{ \"📬 INTERNAL UPDATE\\n\\n*From:* \" + $node[\"Parse Classification\"].json.senderName + \"\\n*Subject:* \" + $node[\"Parse Classification\"].json.subject + \"\\n\\n_Message ID: \" + $node[\"Parse Classification\"].json.messageId + \"_\" }}",
+        "other_properties": {
+          "icon_emoji": ":mailbox:"
+        }
+      },
+      "id": "9d0e1f2a-3b4c-5d6e-7f8a-9b0c1d2e3f4a",
+      "name": "Slack - Team Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 3,
+      "position": [
+        2100,
+        700
+      ],
+      "credentials": {
+        "slackApi": "slack_creds"
+      },
+      "dependsOn": [
+        "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b"
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": "={{ $env.LOGGING_SHEET_ID }}",
+        "range": "A:F",
+        "keyRow": 0,
+        "options": {}
+      },
+      "id": "1f2a3b4c-5d6e-7f8a-9b0c-1d2e3f4a5b6c",
+      "name": "Log to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        2100,
+        850
+      ],
+      "credentials": {
+        "googleSheetsApi": "sheets_creds"
+      },
+      "dependsOn": [
+        "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b"
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for Google Sheets logging\nreturn {\n  json: {\n    timestamp: new Date().toISOString(),\n    sender: $node[\"Parse Classification\"].json.sender,\n    senderName: $node[\"Parse Classification\"].json.senderName,\n    subject: $node[\"Parse Classification\"].json.subject,\n    classification: $node[\"Parse Classification\"].json.classification,\n    priority: $node[\"Parse Extracted Data\"].json.priorityLevel,\n    actionItems: $node[\"Parse Extracted Data\"].json.actionItems.join('; '),\n    deadlines: $node[\"Parse Extracted Data\"].json.deadlines.join('; '),\n    messageId: $node[\"Parse Classification\"].json.messageId\n  }\n};"
+      },
+      "id": "3b4c5d6e-7f8a-9b0c-1d2e-3f4a5b6c7d8e",
+      "name": "Format Logging Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        850
+      ],
+      "credentials": {},
+      "dependsOn": [
+        "2c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f"
+      ]
+    },
+    {
+      "parameters": {
+        "mailbox": "Trash",
+        "markAsRead": false,
+        "moveToFolder": "Trash"
+      },
+      "id": "5d6e7f8a-9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b",
+      "name": "Move to Trash",
+      "type": "n8n-nodes-base.imap",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        1000
+      ],
+      "credentials": {
+        "imapConnection": "imap_creds"
+      },
+      "dependsOn": [
+        "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b"
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "#automation-logs",
+        "text": "={{ \"❌ ERROR in Email Triage Workflow\\n\\n*Error Node:* \" + $node.errorNode + \"\\n*Message:* \" + $node.errorMessage + \"\\n*Email:* \" + $node[\"Extract Email Content\"].json.subject + \" from \" + $node[\"Extract Email Content\"].json.sender + \"\\n\\n_Timestamp: \" + new Date().toISOString() + \"_\" }}",
+        "other_properties": {
+          "icon_emoji": ":warning:"
+        }
+      },
+      "id": "7f8a9b0c-1d2e-3f4a-5b6c-7d8e-9f0a1b2c",
+      "name": "Error Handler - Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 3,
+      "position": [
+        1450,
+        1100
+      ],
+      "credentials": {
+        "slackApi": "slack_creds"
+      },
+      "dependsOn": []
+    },
+    {
+      "parameters": {
+        "jsonKeyName": "event",
+        "jsonValue": "={{ {error: $error.message, workflow: 'Email Triage Agent', timestamp: new Date().toISOString(), email_subject: $node[\"Extract Email Content\"].json.subject || 'N/A'} }}",
+        "otherOptions": {}
+      },
+      "id": "9b0c1d2e-3f4a-5b6c-7d8e-9f0a-1b2c3d4e",
+      "name": "Log Error to External Service",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        1750,
+        1100
+      ],
+      "credentials": {},
+      "dependsOn": []
     }
   ],
-  "connections": {},
+  "connections": {
+    "4e3a1c5d-2f47-4b9e-8a1f-7c9b2e5d3f1a": {
+      "main": [
+        [
+          {
+            "node": "7a2b4c1e-9f3a-4d5b-8c2e-1a3b5c7d9e0f",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7a2b4c1e-9f3a-4d5b-8c2e-1a3b5c7d9e0f": {
+      "main": [
+        [
+          {
+            "node": "3c5d2e1f-7a9b-4c8e-5d1a-2b3c4d5e6f7a",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3c5d2e1f-7a9b-4c8e-5d1a-2b3c4d5e6f7a": {
+      "main": [
+        [
+          {
+            "node": "9f1e2a3b-4c5d-6e7f-8a9b-0c1d2e3f4a5b",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9f1e2a3b-4c5d-6e7f-8a9b-0c1d2e3f4a5b": {
+      "main": [
+        [
+          {
+            "node": "5b6c7d8e-9f0a-1b2c-3d4e-5f6a7b8c9d0e",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5b6c7d8e-9f0a-1b2c-3d4e-5f6a7b8c9d0e": {
+      "main": [
+        [
+          {
+            "node": "2c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f": {
+      "main": [
+        [
+          {
+            "node": "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "3b4c5d6e-7f8a-9b0c-1d2e-3f4a5b6c7d8e",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b": {
+      "main": [
+        [
+          {
+            "node": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "3d4e5f6a-7b8c-9d0e-1f2a-3b4c5d6e7f8a",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "5f6a7b8c-9d0e-1f2a-3b4c-5d6e7f8a9b0c",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "1f2a3b4c-5d6e-7f8a-9b0c-1d2e3f4a5b6c",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "9d0e1f2a-3b4c-5d6e-7f8a-9b0c1d2e3f4a",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "5d6e7f8a-9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3b4c5d6e-7f8a-9b0c-1d2e-3f4a5b6c7d8e": {
+      "main": [
+        [
+          {
+            "node": "1f2a3b4c-5d6e-7f8a-9b0c-1d2e3f4a5b6c",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
   "active": false,
   "settings": {
     "executionOrder": "v1",
@@ -209,12 +560,19 @@
     "instanceId": "7f8a9b0c-1d2e-3f4a-5b6c-7d8e-9f0a1b2c",
     "created": "2026-02-21T00:00:00.000Z",
     "updated": "2026-02-21T00:00:00.000Z"
-  }
-    "tags": [
+  },
+  "tags": [
     {
       "name": "Email Automation",
       "id": "1a2b3c4d"
+    },
+    {
+      "name": "Triage",
+      "id": "5e6f7a8b"
+    },
+    {
+      "name": "AI Classification",
+      "id": "9c0d1e2f"
     }
-  C] 
-  }
-�t*~
+  ]
+}
