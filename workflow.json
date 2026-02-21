@@ -1,1 +1,220 @@
-See full workflow.json in repo - 18 nodes n8n email triage workflow
+{
+  "name": "Email Triage Agent - MVP3",
+  "nodes": [
+    {
+      "parameters": {
+        "mailbox": "INBOX",
+        "postProcessing": "mark",
+        "options": {
+          "allowSelfSignedCerts": true
+        }
+      },
+      "id": "4e3a1c5d-2f47-4b9e-8a1f-7c9b2e5d3f1a",
+      "name": "IMAP Email Trigger",
+      "type": "n8n-nodes-imap.imap",
+      "typeVersion": 1,
+      "position": [
+        250,
+        350
+      ],
+      "credentials": {
+        "imapConnection": "imap_creds"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract email metadata and prepare for triage\nconst email = {\n  subject: $input.first().json.subject || '',\n  body: $input.first().json.text || $input.first().json.html || '',\n  sender: $input.first().json.from?.address || $input.first().json.from || '',\n  senderName: $input.first().json.from?.name || 'Unknown',\n  date: $input.first().json.date || new Date().toISOString(),\n  messageId: $input.first().json.messageId || $input.first().json.id || '',\n  inReplyTo: $input.first().json.inReplyTo || null,\n  cc: $input.first().json.cc || [],\n  bcc: $input.first().json.bcc || [],\n  attachmentCount: ($input.first().json.attachments || []).length,\n  isHtml: $input.first().json.html ? true : false,\n  rawEmail: $input.first().json\n};\n\nreturn { json: email };"
+      },
+      "id": "7a2b4c1e-9f3a-4d5b-8c2e-1a3b5c7d9e0f",
+      "name": "Extract Email Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        550,
+        350
+      ],
+      "credentials": {},
+      "dependsOn": [
+        "4e3a1c5d-2f47-4b9e-8a1f-7c9b2e5d3f1a"
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4-turbo",
+        "messages": {
+          "messageValues": [
+            {
+              "content": "={{ \"You are an expert email triage assistant. Analyze the following email and classify it into exactly ONE of these categories:\\n\\nCategories:\\n1. URGENT_ACTION - Requires immediate response or action, time-sensitive matters\\n2. INFORMATIONAL - FYI, newsletters, updates, announcements (no response needed)\\n3. CLIENT_REQUEST - A client/customer asking for something or reporting an issue\\n4. INTERNAL - Internal team communication, meetings, updates\\n5. SPAM - Junk, promotional, unsubscribe requests\\n\\nEmail Subject: \" + $node[\"Extract Email Content\"].json.subject + \"\\nEmail Body: \" + $node[\"Extract Email Content\"].json.body.substring(0, 2000) + \"\\n\\nRespond in JSON format:\\n{\\\"classification\\\": \\\"CATEGORY_NAME\\\", \\\"confidence\\\": 0.0-1.0, \\\"reasoning\\\": \\\"brief explanation\\\"}\" }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "3c5d2e1f-7a9b-4c8e-5d1a-2b3c4d5e6f7a",
+      "name": "Classify Email (Claude/OpenAI)",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 4,
+      "position": [
+        850,
+        350
+      ],
+      "credentials": {
+        "openAiApi": "openai_creds"
+      },
+      "dependsOn": [
+        "7a2b4c1e-9f3a-4d5b-8c2e-1a3b5c7d9e0f"
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI response and extract classification\nconst aiResponse = $input.first().json.response;\nlet classification = {};\n\ntry {\n  // Try to parse JSON from response\n  const jsonMatch = aiResponse.match(/\\{[^{}]*\\}/s);\n  if (jsonMatch) {\n    classification = JSON.parse(jsonMatch[0]);\n  } else {\n    // Fallback: extract from text\n    if (aiResponse.includes('URGENT')) classification.classification = 'URGENT_ACTION';\n    else if (aiResponse.includes('INFORMATIONAL')) classification.classification = 'INFORMATIONAL';\n    else if (aiResponse.includes('CLIENT')) classification.classification = 'CLIENT_REQUEST';\n    else if (aiResponse.includes('INTERNAL')) classification.classification = 'INTERNAL';\n    else classification.classification = 'SPAM';\n    \n    classification.confidence = 0.7;\n    classification.reasoning = aiResponse;\n  }\n} catch (e) {\n  classification.classification = 'INTERNAL';\n  classification.confidence = 0.5;\n  classification.reasoning = 'Parse error: ' + e.message;\n}\n\nconst emailData = $node[\"Extract Email Content\"].json;\n\nreturn {\n  json: {\n    ...emailData,\n    classification: classification.classification,\n    classificationConfidence: classification.confidence,\n    classificationReasoning: classification.reasoning\n  }\n};"
+      },
+      "id": "9f1e2a3b-4c5d-6e7f-8a9b-0c1d2e3f4a5b",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1150,
+        350
+      ],
+      "credentials": {},
+      "dependsOn": [
+        "3c5d2e1f-7a9b-4c8e-5d1a-2b3c4d5e6f7a"
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4-turbo",
+        "messages": {
+          "messageValues": [
+            {
+              "content": "={{ \"Extract key data points from this email in JSON format:\\n\\nEmail Subject: \" + $node[\"Extract Email Content\"].json.subject + \"\\nEmail Body: \" + $node[\"Extract Email Content\"].json.body.substring(0, 2000) + \"\\nClassification: \" + $node[\"Parse Classification\"].json.classification + \"\\n\\nReturn ONLY valid JSON (no markdown, no code blocks):\\n{\\\"actionItems\\\": [\\\"item1\\\", \\\"item2\\\"],\\\"deadlines\\\": [\\\"deadline1\\\"],\\\"mentionedPeople\\\": [\\\"name1\\\"],\\\"priorityLevel\\\": \\\"HIGH/MEDIUM/LOW\\\",\\\"sender_category\\\": \\\"internal/external/vip\\\",\\\"requiredResponse\\\": true/false,\\\"estimatedTimeToRespond\\\": \\\"min\\\"}\" }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "5b6c7d8e-9f0a-1b2c-3d4e-5f6a7b8c9d0e",
+      "name": "Extract Key Data Points",
+      "type": "n8n-nodes-base.openai",
+      "typeVersion": 4,
+      "position": [
+        1150,
+        550
+      ],
+      "credentials": {
+        "openAiApi": "openai_creds"
+      },
+      "dependsOn": [
+        "9f1e2a3b-4c5d-6e7f-8a9b-0c1d2e3f4a5b"
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse extracted data points\nconst aiResponse = $input.first().json.response;\nlet extractedData = {};\n\ntry {\n  const jsonMatch = aiResponse.match(/\\{[\\s\\S]*\\}/m);\n  if (jsonMatch) {\n    extractedData = JSON.parse(jsonMatch[0]);\n  } else {\n    extractedData = {\n      actionItems: [],\n      deadlines: [],\n      mentionedPeople: [],\n      priorityLevel: 'MEDIUM',\n      sender_category: 'external',\n      requiredResponse: false,\n      estimatedTimeToRespond: '0'\n    };\n  }\n} catch (e) {\n  extractedData = {\n    actionItems: [],\n    deadlines: [],\n    mentionedPeople: [],\n    priorityLevel: 'MEDIUM',\n    sender_category: 'external',\n    requiredResponse: false,\n    estimatedTimeToRespond: '0',\n    parseError: e.message\n  };\n}\n\nconst fullEmailData = $node[\"Parse Classification\"].json;\n\nreturn {\n  json: {\n    ...fullEmailData,\n    actionItems: extractedData.actionItems || [],\n    deadlines: extractedData.deadlines || [],\n    mentionedPeople: extractedData.mentionedPeople || [],\n    priorityLevel: extractedData.priorityLevel || 'MEDIUM',\n    sender_category: extractedData.sender_category || 'external',\n    requiredResponse: extractedData.requiredResponse || false,\n    estimatedTimeToRespond: extractedData.estimatedTimeToRespond || '0'\n  }\n};"
+      },
+      "id": "2c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f",
+      "name": "Parse Extracted Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        550
+      ],
+      "credentials": {},
+      "dependsOn": [
+        "5b6c7d8e-9f0a-1b2c-3d4e-5f6a7b8c9d0e"
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "numberConditions": {
+            "numberCondition": [
+              {
+                "comparator": "equals",
+                "value1": "={{ $node[\"Parse Classification\"].json.classification }}",
+                "value2": "URGENT_ACTION"
+              }
+            ]
+          }
+        }
+      },
+      "id": "8a1b2c3d-4e5f-6a7b-8c9d-0e1f-2a3b4c5d",
+      "name": "Route by Classification",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1750,
+        400
+      ],
+      "credentials": {},
+      "dependsOn": [
+        "2c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f"
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToMatchOnInput": "classification",
+        "branches": [
+          {
+            "value": "URGENT_ACTION",
+            "outputKey": "urgent"
+          },
+          {
+            "value": "CLIENT_REQUEST",
+            "outputKey": "client"
+          },
+          {
+            "value": "INFORMATIONAL",
+            "outputKey": "informational"
+          },
+          {
+            "value": "INTERNAL",
+            "outputKey": "internal"
+          },
+          {
+            "value": "SPAM",
+            "outputKey": "spam"
+          }
+        ]
+      },
+      "id": "6e7f8a9b-0c1d-2e3f-4a5b-6c7d8e9f0a1b",
+      "name": "Switch Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        1750,
+        200
+      ],
+      "credentials": {},
+      "dependsOn": [
+        "2c3d4e5f-6a7b-8c9d-0e1f-2a3b4c5d6e7f"
+      ]
+    }
+  ],
+  "connections": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  },
+  "versionId": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "meta": {
+    "instanceId": "7f8a9b0c-1d2e-3f4a-5b6c-7d8e-9f0a1b2c",
+    "created": "2026-02-21T00:00:00.000Z",
+    "updated": "2026-02-21T00:00:00.000Z"
+  }
+    "tags": [
+    {
+      "name": "Email Automation",
+      "id": "1a2b3c4d"
+    }
+  C] 
+  }
+‰t*~
